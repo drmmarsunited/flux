@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const constTime = "2017-01-13T16:22:58.009923189Z"
@@ -189,7 +191,7 @@ func TestImage_OrderByCreationDate(t *testing.T) {
 	imD := mustMakeInfo("my/Image:0", time.Time{}) // test nil
 	imE := mustMakeInfo("my/Image:2", testTime)    // test equal
 	imgs := []Info{imA, imB, imC, imD, imE}
-	sort.Sort(ByCreatedDesc(imgs))
+	sort.Sort(NewSort(imgs, ByCreatedDesc))
 	for i, im := range imgs {
 		if strconv.Itoa(i) != im.ID.Tag {
 			for j, jim := range imgs {
@@ -198,4 +200,27 @@ func TestImage_OrderByCreationDate(t *testing.T) {
 			t.Fatalf("Not sorted in expected order: %#v", imgs)
 		}
 	}
+}
+
+func TestImage_OrderBySemverTagDesc(t *testing.T) {
+	ti := time.Time{}
+	aa := mustMakeInfo("my/image:3", ti)
+	bb := mustMakeInfo("my/image:v1", ti)
+	cc := mustMakeInfo("my/image:1.10", ti)
+	dd := mustMakeInfo("my/image:1.2.30", ti)
+	ee := mustMakeInfo("my/image:unknown", ti)
+
+	imgs := []Info{aa, bb, cc, dd, ee}
+	sort.Sort(NewSort(imgs, BySemverTagDesc))
+
+	expected := []Info{ee, aa, cc, dd, bb}
+	assert.Equal(t, tags(expected), tags(imgs))
+}
+
+func tags(imgs []Info) []string {
+	var vs []string
+	for _, i := range imgs {
+		vs = append(vs, i.ID.Tag)
+	}
+	return vs
 }

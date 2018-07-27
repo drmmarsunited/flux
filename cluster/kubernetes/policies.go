@@ -27,7 +27,7 @@ func (m *Manifests) UpdatePolicies(def []byte, id flux.ResourceID, update policy
 		}
 
 		for _, container := range containers {
-			if tagAll == "glob:*" {
+			if tagAll == policy.PatternAll.String() {
 				del = del.Add(policy.TagPrefix(container.Name))
 			} else {
 				add = add.Set(policy.TagPrefix(container.Name), tagAll)

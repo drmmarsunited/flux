@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Masterminds/semver"
 	"github.com/pkg/errors"
 )
 
@@ -276,20 +277,58 @@ func (im *Info) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ByCreatedDesc is a shim used to sort image info by creation date
-type ByCreatedDesc []Info
+type SortLessFunc func(lhs, rhs *Info) bool
 
-func (is ByCreatedDesc) Len() int      { return len(is) }
-func (is ByCreatedDesc) Swap(i, j int) { is[i], is[j] = is[j], is[i] }
-func (is ByCreatedDesc) Less(i, j int) bool {
-	switch {
-	case is[i].CreatedAt.IsZero():
-		return true
-	case is[j].CreatedAt.IsZero():
-		return false
-	case is[i].CreatedAt.Equal(is[j].CreatedAt):
-		return is[i].ID.String() < is[j].ID.String()
-	default:
-		return is[i].CreatedAt.After(is[j].CreatedAt)
+type Sort struct {
+	infos []Info
+	less  SortLessFunc
+}
+
+func NewSort(infos []Info, less SortLessFunc) *Sort {
+	if less == nil {
+		less = ByCreatedDesc
 	}
+	return &Sort{infos, less}
+}
+
+func (s *Sort) Len() int {
+	return len(s.infos)
+}
+
+func (s *Sort) Swap(i, j int) {
+	s.infos[i], s.infos[j] = s.infos[j], s.infos[i]
+}
+
+func (s *Sort) Less(i, j int) bool {
+	return s.less(&s.infos[i], &s.infos[j])
+}
+
+// ByCreatedDesc is a shim used to sort image info by creation date
+
+// FIXME(rndstr): not stable
+func ByCreatedDesc(lhs, rhs *Info) bool {
+	switch {
+	case lhs.CreatedAt.IsZero():
+		return true
+	case rhs.CreatedAt.IsZero():
+		return false
+	case lhs.CreatedAt.Equal(rhs.CreatedAt):
+		return lhs.ID.String() < rhs.ID.String()
+	default:
+		return lhs.CreatedAt.After(rhs.CreatedAt)
+	}
+}
+
+// ByCreatedDesc is a shim used to sort image info by semver
+// FIXME(rndstr): not stable
+func BySemverTagDesc(lhs, rhs *Info) bool {
+	iv, err := semver.NewVersion(lhs.ID.Tag)
+	if err != nil {
+		return true
+	}
+	jv, err := semver.NewVersion(rhs.ID.Tag)
+	if err != nil {
+		return false
+	}
+	return iv.Compare(jv) > 0
 }

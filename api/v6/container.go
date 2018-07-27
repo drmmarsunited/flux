@@ -5,6 +5,7 @@ import (
 	"github.com/weaveworks/flux/image"
 	"github.com/weaveworks/flux/registry"
 	"github.com/weaveworks/flux/update"
+	"github.com/weaveworks/flux/policy"
 )
 
 // Container describes an individual container including current image info and
@@ -26,7 +27,7 @@ type Container struct {
 }
 
 // NewContainer creates a Container given a list of images and the current image
-func NewContainer(name string, images update.ImageInfos, currentImage image.Info, tagPattern string, fields []string) (Container, error) {
+func NewContainer(name string, images update.ImageInfos, currentImage image.Info, tagPattern policy.Pattern, fields []string) (Container, error) {
 	// All images
 	imagesCount := len(images)
 	imagesErr := ""
@@ -35,7 +36,7 @@ func NewContainer(name string, images update.ImageInfos, currentImage image.Info
 	}
 	var newImages []image.Info
 	for _, img := range images {
-		if img.CreatedAt.After(currentImage.CreatedAt) {
+		if img.CreatedAt.After(currentImage.CreatedAt) { // TODO(rndstr)
 			newImages = append(newImages, img)
 		}
 	}

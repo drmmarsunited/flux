@@ -2,14 +2,15 @@ package update
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
-	glob "github.com/ryanuber/go-glob"
 
 	fluxerr "github.com/weaveworks/flux/errors"
 	"github.com/weaveworks/flux/image"
+	"github.com/weaveworks/flux/policy"
 	"github.com/weaveworks/flux/registry"
 	"github.com/weaveworks/flux/resource"
 )
@@ -39,20 +40,21 @@ func (r ImageRepos) GetRepoImages(repo image.Name) ImageInfos {
 type ImageInfos []image.Info
 
 // Filter returns only the images which match the tagGlob.
-func (ii ImageInfos) Filter(tagGlob string) ImageInfos {
+func (ii ImageInfos) Filter(pattern policy.Pattern) ImageInfos {
 	var filtered ImageInfos
 	for _, i := range ii {
 		tag := i.ID.Tag
 		// Ignore latest if and only if it's not what the user wants.
-		if !strings.EqualFold(tagGlob, "latest") && strings.EqualFold(tag, "latest") {
+		if strings.EqualFold(tag, "latest") && pattern != policy.PatternLatest {
 			continue
 		}
-		if glob.Glob(tagGlob, tag) {
+		if pattern.Matches(tag) {
 			var im image.Info
 			im = i
 			filtered = append(filtered, im)
 		}
 	}
+	sort.Sort(image.NewSort(filtered, pattern.ImageLess()))
 	return filtered
 }
 
@@ -81,6 +83,7 @@ func (ii ImageInfos) FindWithRef(ref image.Ref) image.Info {
 type containers interface {
 	Len() int
 	Containers(i int) []resource.Container
+	Pattern(i int, container string) policy.Pattern
 }
 
 type controllerContainers []*ControllerUpdate
@@ -93,6 +96,13 @@ func (cs controllerContainers) Containers(i int) []resource.Container {
 	return cs[i].Controller.ContainersOrNil()
 }
 
+func (cs controllerContainers) Pattern(i int, container string) policy.Pattern {
+	if pattern, ok := cs[i].Resource.Policy().Get(policy.TagPrefix(container)); ok {
+		return policy.NewPattern(pattern)
+	}
+	return policy.PatternAll
+}
+
 // fetchUpdatableImageRepos is a convenient shim to
 // `FetchImageRepos`.
 func fetchUpdatableImageRepos(registry registry.Registry, updateable []*ControllerUpdate, logger log.Logger) (ImageRepos, error) {
@@ -100,16 +110,20 @@ func fetchUpdatableImageRepos(registry registry.Registry, updateable []*Controll
 }
 
 // FetchImageRepos finds all the known image metadata for
-// containers in the controllers given.
+// containers in the controllers given.  The images within each image repo are sorted according
 func FetchImageRepos(reg registry.Registry, cs containers, logger log.Logger) (ImageRepos, error) {
+	// Collect pattern types for sort order
+	patterns := map[image.CanonicalName]policy.Pattern{}
 	imageRepos := imageReposMap{}
 	for i := 0; i < cs.Len(); i++ {
 		for _, container := range cs.Containers(i) {
 			imageRepos[container.Image.CanonicalName()] = nil
+			patterns[container.Image.CanonicalName()] = cs.Pattern(i, container.Name)
 		}
 	}
 	for repo := range imageRepos {
-		sortedRepoImages, err := reg.GetSortedRepositoryImages(repo.Name)
+		pattern := patterns[repo]
+		sortedRepoImages, err := reg.GetSortedRepositoryImages(repo.Name, pattern.ImageLess())
 		if err != nil {
 			// Not an error if missing. Use empty images.
 			if !fluxerr.IsMissing(err) {

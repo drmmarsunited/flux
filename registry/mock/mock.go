@@ -40,7 +40,8 @@ type Registry struct {
 	Err    error
 }
 
-func (m *Registry) GetSortedRepositoryImages(id image.Name) ([]image.Info, error) {
+func (m *Registry) GetSortedRepositoryImages(id image.Name, lessfn image.SortLessFunc) ([]image.Info, error) {
+	// FIXME(rndstr): do we need to sort here? was the assumption m.Images is sorted according to CreatedAtDesc?
 	var imgs []image.Info
 	for _, i := range m.Images {
 		// include only if it's the same repository in the same place

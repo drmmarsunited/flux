@@ -113,6 +113,22 @@ func TestUpdatePolicies(t *testing.T) {
 				Remove: policy.Set{policy.LockedMsg: "foo"},
 			},
 		},
+		{
+			name: "add tag policy",
+			in:   []string{"flux.weave.works/tag.nginx", "glob:*"},
+			out:  []string{"flux.weave.works/tag.nginx", "glob:*"},
+			update: policy.Update{
+				Add: policy.Set{policy.TagPrefix("nginx"): "glob:*"},
+			},
+		},
+		{
+			name: "add non-glob tag policy",
+			in:   []string{"flux.weave.works/tag.nginx", "foo"},
+			out:  []string{"flux.weave.works/tag.nginx", "foo"},
+			update: policy.Update{
+				Add: policy.Set{policy.TagPrefix("nginx"): "foo"},
+			},
+		},
 	} {
 		caseIn := templToString(t, annotationsTemplate, c.in)
 		caseOut := templToString(t, annotationsTemplate, c.out)
